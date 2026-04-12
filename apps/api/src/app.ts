@@ -19,7 +19,19 @@ import { limiter } from "./middleware/rateLimiter.js";
 const app: Express = express();
 
 app.use(helmet());
-app.use(cors({ origin: true, credentials: true }));
+const allowedOrigins = [
+  "http://localhost:3000", // Keep this for your local development
+  "https://ai-voldebug.vercel.app" // Your live Vercel frontend
+];
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
