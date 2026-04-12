@@ -1,0 +1,353 @@
+// Voldebug AI Education Portal — Prisma Schema
+// All primary keys use cuid(). Soft deletes on user-generated content.
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────
+
+enum UserRole {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum AssignmentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  GRADED
+  RETURNED
+}
+
+enum XPSource {
+  ASSIGNMENT_SUBMIT
+  ASSIGNMENT_GRADE
+  DAILY_LOGIN
+  FIRST_TOOL_USE
+  EARLY_SUBMISSION
+  DAILY_CHALLENGE
+  STREAK_BONUS
+  BADGE_EARNED
+  TEACHER_BONUS
+}
+
+enum ToolCategory {
+  CHAT_AI
+  CODE_AI
+  IMAGE_AI
+  WRITING_AI
+  RESEARCH_AI
+}
+
+enum NotificationType {
+  ASSIGNMENT_CREATED
+  GRADE_RECEIVED
+  BADGE_EARNED
+  LEVEL_UP
+  TEACHER_MESSAGE
+  DEADLINE_REMINDER
+  STREAK_BONUS
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────
+// Relation naming rule: only the "defining" side (the one with the FK)
+// gets `fields` + `references`. The inverse side gets only the relation name.
+
+model School {
+  id        String   @id @default(cuid())
+  name      String
+  adminId   String?  @unique
+  admin     User?    @relation("SchoolAdmin", fields: [adminId], references: [id])
+  members   User[]   @relation("SchoolMembers")
+  classes   Class[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("schools")
+}
+
+model User {
+  id               String             @id @default(cuid())
+  name             String?
+  email            String?            @unique
+  emailVerified    DateTime?
+  passwordHash     String?
+  image            String?
+  role             UserRole
+  onboardingStatus OnboardingStatus   @default(NOT_STARTED)
+  gradeLevel       Int?
+  studentId        String?
+  schoolId         String?
+  school           School?            @relation("SchoolMembers", fields: [schoolId], references: [id])
+  administeredSchool School?          @relation("SchoolAdmin")
+  taughtClasses    Class[]            @relation("ClassTeacher")
+  classMemberships ClassMember[]
+  assignments      Assignment[]       @relation("AssignmentCreator")
+  submissions      Submission[]
+  xpTransactions   XPTransaction[]
+  badges           UserBadge[]
+  dailyChallenges  DailyChallenge[]
+  notifications    Notification[]
+  streak           Streak?
+  lastActiveAt     DateTime           @default(now())
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  // NextAuth
+  accounts  Account[]
+  sessions  Session[]
+
+  @@index([role])
+  @@index([schoolId])
+  @@index([lastActiveAt])
+  @@map("users")
+}
+
+model Class {
+  id          String        @id @default(cuid())
+  name        String
+  schoolId    String?
+  school      School?       @relation(fields: [schoolId], references: [id])
+  teacherId   String
+  teacher     User          @relation("ClassTeacher", fields: [teacherId], references: [id])
+  members     ClassMember[]
+  assignments Assignment[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([teacherId])
+  @@index([schoolId])
+  @@map("classes")
+}
+
+model ClassMember {
+  id       String   @id @default(cuid())
+  classId  String
+  class    Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+
+  @@unique([classId, userId])
+  @@index([classId])
+  @@index([userId])
+  @@map("class_members")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Tool {
+  id          String        @id @default(cuid())
+  name        String
+  category    ToolCategory
+  description String        @db.Text
+  logoUrl     String
+  brandColor  String        @default("#ffffff")
+  useCases    String[]
+  subjects    String[]
+  usageCount  Int           @default(0)
+  assignments Assignment[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([category])
+  @@map("tools")
+}
+
+model Assignment {
+  id                String           @id @default(cuid())
+  title             String
+  description       String           @db.Text
+  classId           String
+  class             Class            @relation(fields: [classId], references: [id])
+  creatorId         String
+  creator           User             @relation("AssignmentCreator", fields: [creatorId], references: [id])
+  suggestedToolId   String?
+  suggestedTool     Tool?            @relation(fields: [suggestedToolId], references: [id])
+  dueDate           DateTime
+  xpReward          Int              @default(50)
+  earlyBonus        Int              @default(25)
+  status            AssignmentStatus @default(DRAFT)
+  submissionFormats String[]
+  notifyOnPublish   Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  deletedAt        DateTime?
+  submissions      Submission[]
+
+  @@index([classId])
+  @@index([creatorId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([deletedAt])
+  @@map("assignments")
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  assignmentId String
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id])
+  studentId    String
+  student      User             @relation(fields: [studentId], references: [id])
+  fileUrls     String[]
+  studentNotes String?
+  status       SubmissionStatus @default(SUBMITTED)
+  submittedAt  DateTime         @default(now())
+  gradedAt     DateTime?
+  score        Int?
+  grade        String?
+  feedback     String?          @db.Text
+  xpAwarded    Int?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  deletedAt    DateTime?
+
+  @@index([assignmentId])
+  @@index([studentId])
+  @@index([status])
+  @@index([submittedAt])
+  @@index([deletedAt])
+  @@map("submissions")
+}
+
+model XPTransaction {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  amount       Int
+  source       XPSource
+  assignmentId String?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([assignmentId])
+  @@map("xp_transactions")
+}
+
+model Badge {
+  id            String      @id @default(cuid())
+  name          String
+  description   String      @db.Text
+  iconUrl       String
+  conditionKey  String      @unique
+  requiredCount Int         @default(1)
+  xpReward      Int         @default(100)
+  isActive      Boolean     @default(true)
+  earnedBy      UserBadge[]
+  createdAt     DateTime    @default(now())
+
+  @@map("badges")
+}
+
+model UserBadge {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeId       String
+  badge         Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  earnedAt      DateTime @default(now())
+  progressCount Int      @default(0)
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+  @@index([badgeId])
+  @@map("user_badges")
+}
+
+model Streak {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id])
+  currentStreak Int      @default(0)
+  longestStreak Int      @default(0)
+  lastActiveDate DateTime
+  bonusXP       Int      @default(0)
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@map("streaks")
+}
+
+model DailyChallenge {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  date        String
+  action      String
+  toolId      String?
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+  xpAwarded   Int?
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+  @@index([completed])
+  @@map("daily_challenges")
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String           @db.Text
+  read      Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([read])
+  @@index([userId, read, createdAt])
+  @@map("notifications")
+}

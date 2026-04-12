@@ -1,0 +1,43 @@
+{
+  "name": "@voldebug/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Voldebug AI Education Portal — Next.js frontend",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .next node_modules"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.62.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^11.15.0",
+    "lucide-react": "^1.7.0",
+    "next": "^14.2.15",
+    "next-auth": "^5.0.0-beta.25",
+    "react": "^18.3.0",
+    "react-confetti": "^6.4.0",
+    "react-dom": "^18.3.0",
+    "react-hook-form": "^7.54.0",
+    "socket.io-client": "^4.8.0",
+    "tailwind-merge": "^2.6.0",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^3.24.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@voldebug/config": "workspace:*",
+    "@voldebug/types": "workspace:*",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.7.0"
+  }
+}
